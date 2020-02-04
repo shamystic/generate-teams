@@ -130,7 +130,7 @@ def assign_topic(group_topic):
 	group_topic = list(group_topic)
 	most_common = Counter(group_topic).most_common(1)[0][0]
 	top_topics = Counter(group_topic).most_common(3)
-	topic_vals = [a[0] for a in Counter(group_topic).most_common(2)]	
+	topic_vals = [a[0] for a in Counter(group_topic).most_common(3)]	
 	if top_topics[0][1] == top_topics[1][1]:
 		# Need to break ties
 		prefs_chunks = list(chunks(group_topic, 3))
