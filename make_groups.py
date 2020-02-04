@@ -5,27 +5,31 @@ A python program that will create groups for an assignment which will be done in
 
 Input: List of students, list of desired pairings, and ranked preferences.
 
-Output: Groups of 3, 4, or 5, preferred 4,      	
-ola, rcd, ksm, 3
-
-Use randomness to ensure a fair process. 
-Everyone should get at least one of the topics that they signed up for, but this is not guaranteed. 
-
-Steps 
-1. Assign groups. Assign desired pairs to each other, and others in a random group. 
+Output: groups.txt file of 3, 4, or 5, preferred 4, members with a topic:
+ola, rcd, ksm, 3.
 """
 import re
 import random 
 from collections import defaultdict
 from difflib import SequenceMatcher
+from collections import Counter
 
 
+def process_inputs(netid_filename, prefs_filename) -> (list(), list()):
+	# Read in data.
 
-def process_inputs(netids, prefs):
-	# Randomly assign order to netids
-	random.shuffle(netids)
-	netid_to_num = {netid: i for i, netid in enumerate(netids)}
+	netid_file = open(netid_filename, 'r')
+	netids =  netid_file.read().splitlines()
+	netid_file.close()
 
+	prefs_file = open(prefs_filename, 'r')
+	prefs =  prefs_file.read().splitlines()
+	prefs_file.close()
+	return netids, prefs
+
+def generate_teams(netids, prefs) -> list():
+
+	# Process input data
 	data = []
 	for pref in prefs:
 		new_pref = re.split('\W+', pref)
@@ -46,20 +50,48 @@ def process_inputs(netids, prefs):
 	
 	# Assign topic preference to the team
 	for pair in pairs: 
-		topic_pref_map[pair] = topic_pref_map[pair.split()[0]]
+		try: 
+			topic_pref_map[pair] = topic_pref_map[pair.split()[0]] + \
+							   topic_pref_map[pair.split()[1]]
+		except KeyError: 
+			topic_pref_map[pair] = topic_pref_map[pair.split()[0]]
 
-	# print topic_pref_map
 
-	# print (pairs, singles)
-	# return data, netid_to_num
+	# Use similarity matching to put the people who did not request pairs into a pair with someone with similar interests. 
+	finished = []
+	for single in singles: 
+		if single in finished: 
+			continue 
+		other_singles = list(set([s for s in singles if s != single])\
+						   .difference(set(finished)))
+		single_pref = topic_pref_map[single]
+		similarity_dict = {s: similar(topic_pref_map[s], single_pref)
+							for s in other_singles}
+		try:
+			closest_person = max(similarity_dict, key=similarity_dict.get)
+			closest_person_pref = topic_pref_map[closest_person]
+
+			new_pair = ' '.join([single, closest_person])
+			new_pair_prefs = ''.join([single_pref, closest_person_pref])
+			pairs.add(new_pair)
+			topic_pref_map[new_pair] = new_pair_prefs
+			finished.extend([single, closest_person])
+		# No person to match with :(
+		except ValueError:
+			continue
+
+	for person in finished:
+		singles.discard(person)
 
 	final_teams = {}
 	teams = pairs.union(singles)
-	finished = []	
+	finished = []
+	finished_netids = []
 	for team in teams:
 		if team in finished: 
 			continue 
-		other_teams = [t for t in teams if t != team]
+		other_teams = list(set([t for t in teams if t != team])\
+						   .difference(set(finished)))
 		team_pref = topic_pref_map[team]
 		similarity_dict = {t: similar(topic_pref_map[t], team_pref)
 							for t in other_teams}		
@@ -70,30 +102,51 @@ def process_inputs(netids, prefs):
 		new_team_prefs = ''.join([team_pref, closest_team_pref])
 		final_teams[new_team] = new_team_prefs
 		finished.extend([team, closest_team])
+		finished_netids.extend(team.split() + closest_team.split())
 
+	# Generate output. 
 	result = []
 	for team, team_prefs in final_teams.items():
 		team = ', '.join(team.split())
 		result.append("{}, {}".format(team, assign_topic(team_prefs)))
 	
+	# Sort by group size to add any stragglers who did not submit the google form.
+	result = sorted(result, key=len)
+	leftover_students = list(set(netids) - set(finished_netids))
+	print('The following students failed to submit the category selection form:', leftover_students)
+	# Add the stragglers to the smallest teams. 
+	curr_team = 0
+	for i in range(len(leftover_students)):
+		result[curr_team] = leftover_students[i] + ', ' + result[curr_team]
+		if curr_team + 1 < len(result):
+			curr_team += 1
+
 	return result
 
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
 
 def assign_topic(group_topic):
-	# Return the top-most topic that is liked by both subgroups in the group.
-	seen = []
-	for topic in group_topic:
-		if topic not in seen:
-			seen.append(topic)
-		else: 
-			return topic
-	return seen[0]
+	# Return the top-most topic that is liked by the most subgroups in the group.
+	most_common = Counter(group_topic).most_common(1)[0][0]
+	top_topics = Counter(group_topic).most_common(2)
+	if top_topics[0][1] == top_topics[1][1]:
+		# Need to break ties
+		index_sums = {}
+		for i in range(len(group_topic)):
+			index_sums[group_topic[i]] = index_sums.get(group_topic[i], 0) + i
+		return min(index_sums, key=index_sums.get)
+	else: 
+		return most_common
 
+
+# Fair because it does not prioritize group over the individual
 
 
 if __name__ == '__main__':
-	prefs = ['ola, rcd, 1, 5, 3', 'rcd, ola, 1, 5, 3','ksm 3, 7, 1']
-	netids = ['ola', 'ksm', 'rcd']
-	print (process_inputs(netids, prefs))
+
+	netids, prefs = process_inputs('students.txt', 'preferences.txt')
+	result = generate_teams(netids, prefs)
+	out = open('teams.txt', 'w+')
+	out.writelines(result)
+	print('Generated teams file teams.txt.')
