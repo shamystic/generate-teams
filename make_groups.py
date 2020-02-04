@@ -17,7 +17,6 @@ from collections import Counter
 
 def process_inputs(netid_filename, prefs_filename) -> (list(), list()):
 	# Read in data.
-
 	netid_file = open(netid_filename, 'r')
 	netids =  netid_file.read().splitlines()
 	netid_file.close()
@@ -128,17 +127,26 @@ def similar(a, b):
 
 def assign_topic(group_topic):
 	# Return the top-most topic that is liked by the most subgroups in the group.
+	group_topic = list(group_topic)
 	most_common = Counter(group_topic).most_common(1)[0][0]
-	top_topics = Counter(group_topic).most_common(2)
+	top_topics = Counter(group_topic).most_common(3)
+	topic_vals = [a[0] for a in Counter(group_topic).most_common(2)]	
 	if top_topics[0][1] == top_topics[1][1]:
 		# Need to break ties
+		prefs_chunks = list(chunks(group_topic, 3))
 		index_sums = {}
 		for i in range(len(group_topic)):
-			index_sums[group_topic[i]] = index_sums.get(group_topic[i], 0) + i
-		return min(index_sums, key=index_sums.get)
+			topic = group_topic[i]
+			index_sums[group_topic[i]] = sum([chunk.index(topic) if topic in chunk else 0 for chunk in prefs_chunks])			 		
+		return min(topic_vals, key=index_sums.get)
 	else: 
 		return most_common
 
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
 # Fair because it does not prioritize group over the individual
 
